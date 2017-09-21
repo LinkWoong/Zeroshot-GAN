@@ -19,4 +19,4 @@ The very first thing that comes to my mind is using GAN and Convnets, their perf
 
 ## People
 
-This is my final year project in [Pattern Recognition & Machine Intelligence Laboratory](http://www.premilab.com/), XJTLU. 
+This is my final year project in [Pattern Recognition & Machine Intelligence Laboratory](http://www.premilab.com/). PremiLab is a new lab set up by the [dean](https://scholar.google.com.hk/citations?user=3l5B0joAAAAJ&hl=en) of EEE department, XJTLU.
