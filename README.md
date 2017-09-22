@@ -15,7 +15,8 @@ In our project, we will generate chinese handwriting characters instead of color
 
 ## Initial ideas
 
-The very first thing that comes to my mind is using GAN and Convnets, their performance on different kinds of task is successful. Then why uses of small amount of data could learn the entire style of dataset? How this prediction is implemented? Well, this is a new area of reaserch and our group are dealing with it. 
+The very first thing that comes to my mind is using GAN and Convnets, their performance on different kinds of task is successful. Then why uses of small amount of data could learn the entire style of dataset? How this prediction is implemented?   
+From the paper I've been reading through, I grabbed two gists for shrinking the size of training set. Indeed, some of the papers proposed an idea of **base**, which is used to generate the other characters. 
 
 ## People
 
