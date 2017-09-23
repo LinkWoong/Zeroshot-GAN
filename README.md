@@ -8,7 +8,9 @@ Cases of large computation memory consumptions are often encountered during the 
 
 Indeed there are some researchers have implemented the idea of **One-Shot** or **Zero-Shot**, however, the results are limited to the training set and they are not generative. For instance, the [cGAN-based Manga Colorization Using a Single Training Image](https://arxiv.org/pdf/1706.06918.pdf) is quite an amazing idea. Their result is obtained from using one single image as training set, which is of great simplicity. Here is their result
 <img src="https://raw.githubusercontent.com/LinkWoong/Zeroshot-GAN/master/image.png" width="900px"/>  
+
 --------------------------------------------------
+
 In last year, there is another team doing similar work and has implemented only **1%** use of dataset. From the source I found on Github, I think this is the best results
 <img src="https://github.com/kaonashi-tyc/zi2zi/blob/master/assets/compare3.png" width="900px"/>  
 
