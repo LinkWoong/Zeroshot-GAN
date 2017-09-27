@@ -1,8 +1,0 @@
-package lm;
-message asswecan
-{
-    required int32  id = 1;
-    required string     str = 2;
-    optional int32      opt = 3;
-}
-
