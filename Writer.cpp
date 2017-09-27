@@ -1,4 +1,4 @@
-#include "lm.asswecan.pb.h"
+#include "lm.packageName.MessageName.pb.h"
 
 int main(void)
 {
