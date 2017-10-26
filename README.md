@@ -27,7 +27,8 @@ Epoch: [ 0], [  28/  56] time: 108.0938, d_loss: 36.62217, g_loss: 105.36942, ca
 Epoch: [ 0], [  29/  56] time: 111.9638, d_loss: 68.66853, g_loss: 35.65288, category_loss: 0.00000, cheat_loss: 0.90976, const_loss: 0.66164, l1_loss: 34.08148, tv_loss: 0.00000<br>
 Epoch: [ 0], [  30/  56] time: 115.8335, d_loss: 43.61385, g_loss: 72.99104, category_loss: 0.00000, cheat_loss: 40.52444, const_loss: 0.50118, l1_loss: 31.96540, tv_loss: 0.00000<br>
 
-I've grabbed some of the logs at the very beginning of training. **category_loss** and **tv_loss** are zero ...I don't think it is a good start.
+I've grabbed some of the logs at the very beginning of training. **category_loss** and **tv_loss** are zero ...I don't think it is a good start. 120-epoch training is on the way.
+
 ## People
 
 This is my final year project in [Pattern Recognition & Machine Intelligence Laboratory](http://www.premilab.com/). PremiLab is a new lab set up by the [dean](https://scholar.google.com.hk/citations?user=3l5B0joAAAAJ&hl=en) of EEE department, XJTLU.
