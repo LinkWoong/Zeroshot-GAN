@@ -4,10 +4,14 @@
 
 Cases of large computation memory consumptions are often encountered during the training process of the model, which requiring decent and expensive GPUs. Facing this regular issue, our group was wondering creating a model that does not take numerious of data during the training. Instead, we only use very small portion of data as training, such as 10% 
 
-## 40 Epoch Results
+## Results
+### 40 Epochs
 <img src="https://raw.githubusercontent.com/LinkWoong/Zeroshot-GAN/master/images/sample_26_1500.png" width="100px" />
 It is just CRAP, only 40-epoch training is used.
-
+### 120 Epochs
+<img src="https://raw.githubusercontent.com/LinkWoong/Zeroshot-GAN/master/images/sample_18_1050.png" width="100px" />
+This seems better, 300-epoch training is on the way.
+ 
 ## Logs (Update on Oct.26th.2017)
 
 > Epoch: [ 0], [  15/  56] time: 61.0244, d_loss: 24.58650, g_loss: 138.14224, category_loss: 0.00000, cheat_loss: 104.68754, const_loss: 2.15147, l1_loss: 31.30323, tv_loss: 0.00000<br>
