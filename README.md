@@ -7,7 +7,8 @@ Cases of large computation memory consumptions are often encountered during the 
 ## Results
 ### 40 Epochs
 <img src="https://raw.githubusercontent.com/LinkWoong/Zeroshot-GAN/master/images/sample_26_1500.png" width="100px" />
-It is just CRAP, only 40-epoch training is used.
+It is just CRAP, only 40-epoch training is used. 
+
 ### 120 Epochs
 <img src="https://raw.githubusercontent.com/LinkWoong/Zeroshot-GAN/master/images/sample_18_1050.png" width="100px" />
 This seems better, 300-epoch training is on the way.
