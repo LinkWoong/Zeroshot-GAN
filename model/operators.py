@@ -97,3 +97,21 @@ def image_norm(image):
 	normalized = (image/127.5) - 1
 
 	return image
+
+def dense_batch_normalization(x, number_out, phase_train, name='bn'):
+
+	beta = tf.get_variable(name + '/fc_beta', shape=[number_out], initializer=tf.constant_initializer(0.0))
+	gamma = tf.get_variable(name + 'fc_gamma', shape=[number_out], initializer=tf.random_normal_initializer(mean=1.0, stddev=0.02))
+
+	batch_mean, batch_var = tf.nn.moments(x, [0], name=name + '/fc_moments')
+	ema = tf.train.ExponentialMovingAverage(decay=0.9)
+
+	def mean_var_update():
+
+		ema_apply_op = ema.apply([batch_mean, batch_var])
+		with tf.control_dependencies(ema_apply_op):
+			return tf.identity(batch_mean), tf.identity(batch_var)
+	mean ,var = tf.cond(name=phase_train, mean_var_update, lambda: (ema.average(batch_mean), ema.average(batch_var)))
+	normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-5)
+
+	return normed
