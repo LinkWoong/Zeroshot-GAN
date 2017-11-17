@@ -141,7 +141,19 @@ def global_batch_norm(x, number_out, phase_train, name='bn'): #BN necessary?
 
 	return normed
 
-def mini_batch_dis(x, num_kernels=100, dim_kernel=5, init=False, name='MD'):
+def mini_batch_dis(x, num_kernels=100, dim_kernel=5, init=False, name='MD'): #decrease mode loss
 
 	num_inputs = df_dim*4
 	theta = tf.get_variable(name+'/theta', [num_inputs, num_kernels, dim_kernel], initializer=tf.random_normal_initializer(stddev=0.05))
+	log_weight_scale = tf.get_variable(name+'/lws', [num_kernels, dim_kernel], initializer=tf.constant_initializer(0.0))
+
+	W = tf.matmul(theta, tf.expand_dims(tf.exp(log_weight_scale)/tf.sqrt(tf.reduce_sum(tf.square(theta),0)), 0))
+	W = tf.reshape(W,[-1, num_kernels*dim_kernel])
+
+	x = tf.reshape(x, [batch_size, num_inputs])
+	ac = tf.reshape(tf.matmul(x, W), [-1, num_kernels, dim_kernel])
+
+	diff = tf.matmul(tf.reduce_sum(tf.abs(tf.sub(tf.expand_dims(ac, 3), tf.expand_dims(tf.transpose(ac, [1, 2, 0]),0))), 2),
+			1-tf.expand_dims(tf.constant(np.eye(batch_size), dtype=np.float32), 1))
+	out = tf.reduce_sum(tf.exp(-diff),2) / tf.reduce_sum(tf.exp(-diff))
+	return tf.concat([x, diff], 1)
