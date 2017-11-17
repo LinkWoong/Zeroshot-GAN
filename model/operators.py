@@ -15,6 +15,15 @@ from __future__ import absolute_import
 log_device_placement = True
 allow_soft_placement = True
 
+batch_size = 50
+image_shape = [28*28]
+z_dim = 30 #latent space reprsentation z proposed in the paper
+gf_dim = 16
+df_dim = 16
+lr = 0.005
+beta1 = 0.5
+
+
 def batch_norm(x, is_training, epsilon=1e-5, decay=0.9, scope="batch_norm"):
 
 	out = tf.contrib.layers.batch_norm(x, decay=decay, updates_collections=None, epsilon=epsilon,
@@ -62,12 +71,10 @@ def fc_layer(x, feature_in, feature_out, scope=None, with_w = False):
 
 		bias = tf.get_variable("bias", shape=[feature_out], dtype=tf.float32, 
 								initializer=tf.constant_initializer(0.0))
-
 		if with_w:
-
 			return tf.matmul(x, weights) + bias, weights, bias
-		else:
 
+		else:
 			return tf.matmul(x, weights) + bias
 
 def init_embedding(size, dimension, stddev=0.01, scope="Embedding"):
@@ -95,10 +102,9 @@ def merge(image, size):
 def image_norm(image):
 
 	normalized = (image/127.5) - 1
-
 	return image
 
-def dense_batch_normalization(x, number_out, phase_train, name='bn'):
+def dense_batch_norm(x, number_out, phase_train, name='bn'): #BN necessary?
 
 	beta = tf.get_variable(name + '/fc_beta', shape=[number_out], initializer=tf.constant_initializer(0.0))
 	gamma = tf.get_variable(name + 'fc_gamma', shape=[number_out], initializer=tf.random_normal_initializer(mean=1.0, stddev=0.02))
@@ -115,3 +121,27 @@ def dense_batch_normalization(x, number_out, phase_train, name='bn'):
 	normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-5)
 
 	return normed
+
+def global_batch_norm(x, number_out, phase_train, name='bn'): #BN necessary?
+
+	beta = tf.get_variable(name + '/beta', shape=[number_out], initializer=tf.constant_initializer(0.0))
+	gamma = tf.get_variable(name + '/gamma', shape=[number_out], initializer=tf.random_normal_initializer(mean=1.0, stddev=0.02))
+
+	batch_mean, batch_var = tf.nn.moments(x, [0, 1, 2], name=name + '/moments')
+	ema = tf.train.ExponentialMovingAverage(decay=0.9)
+
+	def mean_var_update():
+
+		ema_apply_op = ema.apply([batch_mean, batch_var])
+		with tf.control_dependencies(ema_apply_op):
+			return tf.identity(batch_mean), tf.identity(batch_var)
+
+	mean, var = tf.cond(name=phase_train, mean_var_update, lambda: (ema.average(batch_mean), ema.average(batch_var)))
+	normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-5)
+
+	return normed
+
+def mini_batch_dis(x, num_kernels=100, dim_kernel=5, init=False, name='MD'):
+
+	num_inputs = df_dim*4
+	theta = tf.get_variable(name+'/theta', [num_inputs, num_kernels, dim_kernel], initializer=tf.random_normal_initializer(stddev=0.05))
