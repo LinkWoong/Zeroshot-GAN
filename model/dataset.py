@@ -127,5 +127,23 @@ class NeverEndLoopProvider(InjectDataProvider):#inherited from InjectDataProvide
 			rand_iter = super(NeverEndLoopProvider, self).get_random_embedding_iter(batch_size, embedding_id)
 			for labels, images in rand_iter:
 				yield labels, images
+#--------------------unit-test------------------------------------
+#directory = '/home/linkwong/Zeroshot-GAN/model/image.png'
+#image = misc.imread(directory)
+#multiplier = random.uniform(1.00, 1.20) #a number between 1 and 1.2
+#print (multiplier)
+#w, h, _ = image.shape
+#nw = int(multiplier * w) + 1
+#nh = int(multiplier * h) + 1 
+#shift_x = int(np.ceil(np.random.uniform(0.01, nw - w))) #a number between 0.01 and nw-w
+#shift_y = int(np.ceil(np.random.uniform(0.01, nh - h))) #a number between 0.01 and nh-h
 
+#image_A, image_B = read_split_image(directory)
+#misc.imsave('/home/linkwong/Zeroshot-GAN/model/image_A.png', image_A)
+#misc.imsave('/home/linkwong/Zeroshot-GAN/model/image_B.png', image_B)
+#image_A = shift_and_resize_image(image_A, shift_x, shift_y, nw, nh)
+#image_B = shift_and_resize_image(image_B, shift_x, shift_y, nw, nh)
 
+#misc.imsave('/home/linkwong/Zeroshot-GAN/model/image_AA.png', image_A)
+#misc.imsave('/home/linkwong/Zeroshot-GAN/model/image_BB.png', image_B)
+#------------------------------------------------------------------
