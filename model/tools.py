@@ -96,4 +96,27 @@ def save_concat_images(imgs, img_path): #save concated images
 def normalize_image(img): #normalize the images
 	normalized = (img / 127.5) - 1
 	return normalized
+#--------------------unit-test---------------------------
+#directory = '/home/linkwong/Zeroshot-GAN/model/image.png'
+#image = misc.imread(directory)
+#multiplier = random.uniform(1.00, 1.20) #a number between 1 and 1.2
+#w, h, _ = image.shape
+#nw = int(multiplier * w) + 1
+#nh = int(multiplier * h) + 1 
+#shift_x = int(np.ceil(np.random.uniform(0.01, nw - w))) #a number between 0.01 and nw-w
+#shift_y = int(np.ceil(np.random.uniform(0.01, nh - h))) #a number between 0.01 and nh-h
 
+#image_A, image_B = read_split_image(directory)
+#misc.imsave('/home/linkwong/Zeroshot-GAN/model/image_A.png', image_A)
+#misc.imsave('/home/linkwong/Zeroshot-GAN/model/image_B.png', image_B)
+#image_A = shift_and_resize_image(image_A, shift_x, shift_y, nw, nh)
+#image_B = shift_and_resize_image(image_B, shift_x, shift_y, nw, nh)
+
+#image_A = normalize_image(image_A)
+#image_B = normalize_image(image_B)
+#image_save = np.concatenate([image_A, image_B], axis=2)
+#print(image_save.shape)
+
+#misc.imsave('/home/linkwong/Zeroshot-GAN/model/image_AA.png', image_A)
+#misc.imsave('/home/linkwong/Zeroshot-GAN/model/image_BB.png', image_B)
+#---------------------------------------------------------
