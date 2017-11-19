@@ -87,6 +87,13 @@ def merge(images, size): #images merging
 		img[j * h:j * h + h, i * w:i * w+w, :] = image
 	return img
 
-def save_concat_images(imgs, img_path):
+
+def save_concat_images(imgs, img_path): #save concated images
 	concated = np.concatenate(imgs, axis=1)
 	misc.imsave(img_path, concated)
+
+
+def normalize_image(img): #normalize the images
+	normalized = (img / 127.5) - 1
+	return normalized
+
