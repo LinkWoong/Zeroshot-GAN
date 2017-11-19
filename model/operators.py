@@ -14,6 +14,7 @@ from __future__ import absolute_import
 
 log_device_placement = True
 allow_soft_placement = True
+gpu_options = 0.9 #multi-gpu
 
 batch_size = 50
 image_shape = [28*28]
