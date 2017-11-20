@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+from __future__ import print_function
+from __future__ import absolute_import
+
 import numpy as np
 import tensorflow as tf
 import scipy
@@ -9,8 +13,6 @@ import imageio
 import scipy.misc as misc
 
 
-from __future__ import print_function
-from __future__ import absolute_import
 
 log_device_placement = True
 allow_soft_placement = True
@@ -31,7 +33,7 @@ def batch_norm(x, is_training, epsilon=1e-5, decay=0.9, scope="batch_norm"):
 										scale=True, is_training=is_training, scope=scope)
 	return out
 
-def conv2d(x, filter_size, stride_width, stride_height, feature_in, feature_out, scope="conv2d",log_device_placement=True):
+def conv(x, filter_size, stride_width, stride_height, feature_in, feature_out, scope="conv2d",log_device_placement=True):
 
 	with tf.variable_scope(scope):
 
@@ -42,7 +44,7 @@ def conv2d(x, filter_size, stride_width, stride_height, feature_in, feature_out,
 
 	return conv
 
-def deconv2d(x, filter_size, stride_width, stride_height, feature_out, scope="deconv2d",log_device_placement=True):
+def deconv(x, filter_size, stride_width, stride_height, feature_out, scope="deconv2d",log_device_placement=True):
 
 	with tf.variable_scope(scope):
 
@@ -105,42 +107,42 @@ def image_norm(image):
 	normalized = (image/127.5) - 1
 	return image
 
-def dense_batch_norm(x, number_out, phase_train, name='bn'): #BN necessary?
+#def dense_batch_norm(x, number_out, phase_train, name='bn'): #BN necessary?
 
-	beta = tf.get_variable(name + '/fc_beta', shape=[number_out], initializer=tf.constant_initializer(0.0))
-	gamma = tf.get_variable(name + 'fc_gamma', shape=[number_out], initializer=tf.random_normal_initializer(mean=1.0, stddev=0.02))
+	#beta = tf.get_variable(name + '/fc_beta', shape=[number_out], initializer=tf.constant_initializer(0.0))
+	#gamma = tf.get_variable(name + 'fc_gamma', shape=[number_out], initializer=tf.random_normal_initializer(mean=1.0, stddev=0.02))
 
-	batch_mean, batch_var = tf.nn.moments(x, [0], name=name + '/fc_moments')
-	ema = tf.train.ExponentialMovingAverage(decay=0.9)
+	#batch_mean, batch_var = tf.nn.moments(x, [0], name=name + '/fc_moments')
+	#ema = tf.train.ExponentialMovingAverage(decay=0.9)
 
-	def mean_var_update():
+	#def mean_var_update():
 
-		ema_apply_op = ema.apply([batch_mean, batch_var])
-		with tf.control_dependencies(ema_apply_op):
-			return tf.identity(batch_mean), tf.identity(batch_var)
-	mean ,var = tf.cond(name=phase_train, mean_var_update, lambda: (ema.average(batch_mean), ema.average(batch_var)))
-	normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-5)
+	#	ema_apply_op = ema.apply([batch_mean, batch_var])
+	#	with tf.control_dependencies(ema_apply_op):
+	#		return tf.identity(batch_mean), tf.identity(batch_var)
+	#mean ,var = tf.cond(name=phase_train, mean_var_update, lambda: (ema.average(batch_mean), ema.average(batch_var)))
+	#normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-5)
 
-	return normed
+	#return normed
 
-def global_batch_norm(x, number_out, phase_train, name='bn'): #BN necessary?
+#def global_batch_norm(x, number_out, phase_train, name='bn'): #BN necessary?
 
-	beta = tf.get_variable(name + '/beta', shape=[number_out], initializer=tf.constant_initializer(0.0))
-	gamma = tf.get_variable(name + '/gamma', shape=[number_out], initializer=tf.random_normal_initializer(mean=1.0, stddev=0.02))
+	#beta = tf.get_variable(name + '/beta', shape=[number_out], initializer=tf.constant_initializer(0.0))
+	#gamma = tf.get_variable(name + '/gamma', shape=[number_out], initializer=tf.random_normal_initializer(mean=1.0, stddev=0.02))
 
-	batch_mean, batch_var = tf.nn.moments(x, [0, 1, 2], name=name + '/moments')
-	ema = tf.train.ExponentialMovingAverage(decay=0.9)
+	#batch_mean, batch_var = tf.nn.moments(x, [0, 1, 2], name=name + '/moments')
+	#ema = tf.train.ExponentialMovingAverage(decay=0.9)
 
-	def mean_var_update():
+	#def mean_var_update():
 
-		ema_apply_op = ema.apply([batch_mean, batch_var])
-		with tf.control_dependencies(ema_apply_op):
-			return tf.identity(batch_mean), tf.identity(batch_var)
+	#	ema_apply_op = ema.apply([batch_mean, batch_var])
+	#	with tf.control_dependencies(ema_apply_op):
+	#		return tf.identity(batch_mean), tf.identity(batch_var)
 
-	mean, var = tf.cond(name=phase_train, mean_var_update, lambda: (ema.average(batch_mean), ema.average(batch_var)))
-	normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-5)
+	#mean, var = tf.cond(name=phase_train, mean_var_update, lambda: (ema.average(batch_mean), ema.average(batch_var)))
+	#normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-5)
 
-	return normed
+	#return normed
 
 def mini_batch_dis(x, num_kernels=100, dim_kernel=5, init=False, name='MD'): #decrease mode loss
 
@@ -158,3 +160,61 @@ def mini_batch_dis(x, num_kernels=100, dim_kernel=5, init=False, name='MD'): #de
 			1-tf.expand_dims(tf.constant(np.eye(batch_size), dtype=np.float32), 1))
 	out = tf.reduce_sum(tf.exp(-diff),2) / tf.reduce_sum(tf.exp(-diff))
 	return tf.concat([x, diff], 1)
+
+def conv2d(x, output_filters, kh=5, kw=5, sh=2, sw=2, stddev=0.02, scope="conv2d"):
+	with tf.variable_scope(scope):
+		shape = x.get_shape().as_list()
+		W = tf.get_variable('W', [kh, kw, shape[-1], output_filters],
+							initializer=tf.truncated_normal_initializer(stddev=stddev))
+		b = tf.get_variable('b', [output_filters], initializer=tf.constant_initializer(0.0))
+
+		W_conv = tf.nn.conv2d(x, W, strides=[1, sh, sw, 1], padding='SAME')
+		return tf.reshape(tf.nn.bias_add(W_conv, b), W_conv.get_shape())#reshape depends
+
+def deconv2d(x, output_shape, kh=5, kw=5, sh=2, sw=2, stddev=0.02, scope="deconv2d"):
+	with tf.variable_scope(scope):
+		input_shape = x.get_shape().as_list()
+		w = tf.get_variable('w', [kh, kw, output_shape[-1], input_shape[-1]],
+			initializer=tf.truncated_normal_initializer(stddev=stddev))
+		b = tf.get_variable('b', [output_shape[-1]], initializer=tf.constant_initializer(0.0))
+		w_deconv = tf.nn.conv2d_transpose(x, w, output_shape=output_shape, strides=[1, sh, sw, 1])
+
+		return tf.reshape(tf.nn.bias_add(w_deconv, b), w_deconv.get_shape())
+
+#----------------------unit-test for conv&deconv
+
+
+reader = tf.WholeFileReader()
+directory = tf.train.string_input_producer(['/home/linkwong/Zeroshot-GAN/model/image.png'])
+key, value = reader.read(directory)
+
+
+image_tensor = tf.image.decode_png(value)
+initialize = tf.global_variables_initializer()
+
+generator_dim = 64
+discriminator_dim = 64
+
+with tf.Session() as sess:
+
+	sess.run(initialize)
+	coord = tf.train.Coordinator()
+
+	threads = tf.train.start_queue_runners(coord=coord)
+
+	for i in range(1):
+		image = image_tensor.eval()
+
+	image = tf.image.resize_images(image, [256, 256]) #resize the image into 256*256
+	print(image.shape)
+
+	image_ten = tf.convert_to_tensor(image, tf.float32) #convert the image into tensor
+	print(image_ten.shape)
+
+	coord.request_stop()
+	coord.join(threads)
+	image_ten = tf.expand_dims(image_ten, 0)
+	print(image_ten.shape)
+	image_conv = conv2d(image_ten, generator_dim, scope="conv_1")
+	print(image_conv.shape)
+
