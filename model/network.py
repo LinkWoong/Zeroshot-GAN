@@ -125,6 +125,16 @@ class network(object):
 			print(type(d8))
 			return tf.nn.tanh(d8) #scale (-1, 1)
 
+	def generator(self, images, embeddings, embedding_ids, inst_norm, is_training, reuse=False):
+		e8, enc_layers = self.encoder(images, is_training=is_training, reuse=reuse)
+		local_embeddings = tf.nn.embedding_lookup(embeddings, ids=embedding_ids)
+		local_embeddings = tf.reshape(local_embeddings, [self.batch_size, 1, 1, self.embedding_dim]) #(16, 1, 1, 64)
+		embedded = tf.concat([e8, local_embeddings], 3)
+		output = self.decoder(embedded, enc_layers, embedding_ids, inst_norm, is_training=is_training, reuse=reuse)
+
+		return output, e8
+
+	
 dirr = '/home/linkwong/Zeroshot-GAN/model'
 reader = tf.WholeFileReader()
 directory = tf.train.string_input_producer(['/home/linkwong/Zeroshot-GAN/model/image.png'])
