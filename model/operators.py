@@ -166,6 +166,7 @@ def conv2d(x, output_filters, kh=5, kw=5, sh=2, sw=2, stddev=0.02, scope="conv2d
 		shape = x.get_shape().as_list()
 		W = tf.get_variable('W', [kh, kw, shape[-1], output_filters],
 							initializer=tf.truncated_normal_initializer(stddev=stddev))
+		#print(W.shape) (5, 5, 3, 64)
 		b = tf.get_variable('b', [output_filters], initializer=tf.constant_initializer(0.0))
 
 		W_conv = tf.nn.conv2d(x, W, strides=[1, sh, sw, 1], padding='SAME')
@@ -181,6 +182,10 @@ def deconv2d(x, output_shape, kh=5, kw=5, sh=2, sw=2, stddev=0.02, scope="deconv
 
 		return tf.reshape(tf.nn.bias_add(w_deconv, b), w_deconv.get_shape())
 
+def batch_norm(x, is_training, epsilon=1e-5, decay=0.9, scope="batch_norm"):
+    return tf.contrib.layers.batch_norm(x, decay=decay, updates_collections=None, epsilon=epsilon,
+                                        scale=True, is_training=is_training, scope=scope)
+
 #----------------------unit-test for conv&deconv
 
 
@@ -194,6 +199,7 @@ initialize = tf.global_variables_initializer()
 
 generator_dim = 64
 discriminator_dim = 64
+output_width = 256
 
 with tf.Session() as sess:
 
@@ -213,8 +219,24 @@ with tf.Session() as sess:
 
 	coord.request_stop()
 	coord.join(threads)
-	image_ten = tf.expand_dims(image_ten, 0)
-	print(image_ten.shape)
-	image_conv = conv2d(image_ten, generator_dim, scope="conv_1")
-	print(image_conv.shape)
 
+	image_ten = tf.expand_dims(image_ten, 0) #(1, 256, 256, 3)
+	image_conv_1 = conv2d(image_ten, generator_dim, scope="conv_1") #(1, 128, 128, 64)
+	image_conv_2 = conv2d(image_conv_1, generator_dim*2, scope="conv_2")#(1, 64, 64, 128)
+	image_conv_3 = conv2d(image_conv_2, generator_dim*4, scope="conv_3")#(1, 32, 32, 256)
+	image_conv_4 = conv2d(image_conv_3, generator_dim*8, scope="conv_4")#(1, 16, 16, 512)
+	image_conv_5 = conv2d(image_conv_4, generator_dim*8, scope="conv_5")#(1, 8, 8, 512)
+	image_conv_6 = conv2d(image_conv_5, generator_dim*8, scope="conv_6")#(1, 4, 4, 512)
+	image_conv_7 = conv2d(image_conv_6, generator_dim*8, scope="conv_7")#(1, 2, 2, 512)
+	image_conv_8 = conv2d(image_conv_7, generator_dim*8, scope="conv_8")#(1, 1, 1, 512)
+	#print(image_conv_8.shape)
+
+	image_deconv_8 = deconv2d(image_conv_8, [1, 2, 2, generator_dim*8], scope="deconv_8")#(1, 2, 2, 512)
+	image_deconv_7 = deconv2d(image_deconv_8, [1, 4, 4, generator_dim*8], scope="deconv_7")#(1, 4, 4, 512)
+	image_deconv_6 = deconv2d(image_deconv_7, [1, 8, 8, generator_dim*8], scope="deconv_6")#(1, 8, 8, 512)
+	image_deconv_5 = deconv2d(image_deconv_6, [1, 16, 16, generator_dim*8], scope="deconv_5")#(1, 16, 16, 512)
+	image_deconv_4 = deconv2d(image_deconv_5, [1, 32, 32, generator_dim*4], scope="deconv_4")#(1, 32, 32, 256)
+	image_deconv_3 = deconv2d(image_deconv_4, [1, 64, 64, generator_dim*2], scope="deconv_3")#(1, 64, 64, 128)
+	image_deconv_2 = deconv2d(image_deconv_3, [1, 128, 128, generator_dim], scope="deconv_2")#(1, 128, 128, 64)
+	image_deconv_1 = deconv2d(image_deconv_2, [1, 256, 256, 3], scope="deconv_1")
+	#print(image_deconv_1.shape)
