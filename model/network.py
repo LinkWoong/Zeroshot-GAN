@@ -134,7 +134,205 @@ class network(object):
 
 		return output, e8
 
+	def discriminator(self, image, is_training, reuse=False): #from pix2pix model
+		with tf.variable_scope("discriminator"):
+			if reuse:
+				tf.get_variable_scope().reuse_variables()
+
+			h0 = leakyrelu(conv2d(image, self.discriminator_dim, scope="d_h0_conv"))
+			h1 = leakyrelu(batch_norm(conv2d(h0, self.discriminator_dim * 2, scope="d_h1_conv"),
+											is_training, scope="d_bn_1"))
+			h2 = leakyrelu(batch_norm(conv2d(h1, self.discriminator_dim * 4, scope="d_h2_conv"),
+											is_training, scope="d_bn_2"))
+			h3 = leakyrelu(batch_norm(conv2d(h2, self.discriminator_dim * 8, sh=1, sw=1, scope="d_h3_conv"),
+											is_training, scope="d_bn_3"))
+			fc1 = fc_layer(tf.reshape(h3, [self.batch_size, -1]), 1, scope="d_fc1")
+			fc2 = fc_layer(tf.reshape(h3, [self.batch_size, -1]), self.embedding_num, scope="d_fc2")
+
+			return tf.nn.sigmoid(fc1), fc1, fc2
 	
+	def build_model(self, is_training=True, inst_norm=False, no_target_source=False):
+		real_data = tf.placeholder(tf.float32, [self.batch_size, self.input_width, self.input_width,
+					self.input_filters + self.output_filters], name='real_A_and_B_images')
+		embedding_ids = tf.placeholder(tf.int64, shape=None, name="embedding_ids")
+		no_target_data = tf.placeholder(tf.float32, [self.batch_size, self.input_width,
+													self.input_width, self.input_filters + self.output_filters],
+													name='no_target_A_and_B_images')
+
+		no_target_id = tf.placeholder(tf.int64, shape=None, name='no_target_id')
+
+		#target images
+		real_target = real_data[:, :, :, :self.input_filters]
+
+		#source images
+		real_source = real_data[:, :, :, self.input_filters:self.input_filters + self.output_filters]
+
+		embedding = init_embedding(self.embedding_num, self.embedding_dim)# (40, 1, 1, 128)
+		fake_target, encode_real_source = self.generator(real_source, embedding, embedding_ids,
+															is_training=is_training, inst_norm=inst_norm)
+		real_source_target = tf.concat([real_source, real_target], 3)#concat for discrimination
+		fake_source_target = tf.concat([real_source, fake_target], 3)#concat for discrimination
+
+		#discriminated ones
+		real_D, real_D_logits, real_category_logits = self.discriminator(real_source_target,
+														is_training=is_training, reuse=False)
+		fake_D, fake_D_logits, fake_category_logits = self.discriminator(fake_source_target,
+														is_training=is_training, reuse=True)
+		encode_fake_target = self.encoder(fake_target, is_training, reuse=True)[0]
+
+		#losses set up
+
+		#constant loss
+		const_loss = (tf.reduce_mean(tf.square(encode_real_source - encode_fake_target))) * self.Lconst_penalty
+
+		#category loss (introduced in Google's one-shot paper)
+		true_labels = tf.reshape(tf.one_hot(indices=embedding_ids, depth=self.embedding_num),
+											[self.batch_size, self.embedding_num])
+		real_category_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=real_category_logits,
+											labels=true_labels))
+		fake_category_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_category_logits,
+											labels=true_labels))
+		category_loss = self.Lcategory_penalty * (real_category_loss + fake_category_loss)
+
+		#binary real/fake loss(for discriminator)
+
+		d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=real_D_logits,
+											labels=tf.ones_like(real_D)))
+		d_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_D_logits,
+											labels=tf.zeros_like(fake_D)))
+
+		#L1 loss between real and generated images
+
+		l1_loss = self.L1_penalty * tf.reduce_mean(tf.abs(fake_target - real_target))
+
+		#tv_loss
+		tv_loss = (tf.nn.l2_loss(fake_target[:, 1:, :, :] - fake_target[:, :self.output_width - 1, :, :])/self.output_width
+					+ tf.nn.l2_loss(fake_target[:, :, 1:, :] - fake_target[:, :, :self.output_width - 1, :])/self.output_width) * self.Ltv_penalty
+
+		#fool
+
+		cheat_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_D_logits,
+									labels=tf.ones_like(fake_D)))
+
+		discriminator_loss = d_loss_real + d_loss_fake + category_loss / 2.0
+		generator_loss = cheat_loss + l1_loss + self.Lcategory_penalty * fake_category_loss + const_loss + tv_loss
+
+		if no_target_source: #used to prevent discriminator saturation
+
+			no_target_source = no_target_data[:, :, :, self.input_filters:self.output_filters]
+			no_target_target, encode_no_target_source = self.generator(no_target_source, embedding, no_target_id,
+														is_training=is_training, inst_norm=inst_norm, reuse=True)
+			no_target_labels = tf.reshape(tf.one_hot(indices=no_target_id, depth=self.embedding_num),
+											shape=[self.batch_size, self.embedding_num])
+			no_target_source_target = tf.concat([no_target_source, no_target_target], 3)
+			no_target_D, no_target_D_logits, no_target_category_logits = self.discriminator(no_target_source_target,
+																			is_training=is_training, reuse=True)
+			encode_no_target_target = self.encoder(no_target_target, is_training, reuse=True)[0]
+			no_target_const_loss = tf.reduce_mean(tf.square(encode_no_target_source - encode_no_target_target)) * self.Lconst_penalty
+			no_target_category_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=no_target_category_logits,
+																							labels=no_target_labels))
+			d_loss_no_target = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=no_target_D_logits, labels=tf.zeros_like(no_target_D)))
+			cheat_loss += tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=no_target_D_logits, labels=tf.ones_like(no_target_D)))
+
+			discriminator_loss = d_loss_real + d_loss_fake + d_loss_no_target +(category_loss + no_target_category_loss) / 3.0
+			generator_loss = cheat_loss / 2.0 + (l1_loss + self.Lcategory_penalty * fake_category_loss + no_target_category_loss)/2.0 + (const_loss + no_target_const_loss) / 2.0 + tv_loss
+
+
+		#summary for compuation graph
+
+		d_loss_real_summary = tf.summary.scalar("d_loss_real", d_loss_real)
+		d_loss_fake_summary = tf.summary.scalar("d_loss_fake", d_loss_fake)
+		category_loss_summary = tf.summary.scalar("category_loss", category_loss)
+		cheat_loss_summary = tf.summary.scalar("cheat_loss", cheat_loss)
+		l1_loss_summary = tf.summary.scalar("l1_loss", l1_loss)
+		fake_category_loss_summary = tf.summary.scalar("fake_category_loss", fake_category_loss)
+		const_loss_summary = tf.summary.scalar("const_loss", const_loss)
+		discriminator_loss_summary = tf.summary.scalar("discriminator_loss", discriminator_loss)
+		generator_loss_summary = tf.summary.scalar("generator_loss", generator_loss)
+		tv_loss_summary = tf.summary.scalar("tv_loss", tv_loss)
+
+		d_merged_summary = tf.summary.merge([d_loss_real_summary, d_loss_fake_summary,
+											category_loss_summary, discriminator_loss_summary])
+		g_merged_summary = tf.summary.merge([cheat_loss_summary, l1_loss_summary,
+											fake_category_loss_summary, const_loss_summary,
+											generator_loss_summary, tv_loss_summary])
+
+
+		#add handles
+		input_handle = InputHandle(real_data=real_data, embedding_id=embedding_id,
+									no_target_data=no_target_data, no_target_id=no_target_id)
+
+		loss_handle = LossHandle(d_loss=discriminator_loss, g_loss=generator_loss, const_loss=const_loss,
+								l1_loss=l1_loss, category_loss=category_loss, cheat_loss=cheat_loss, tv_loss=tv_loss)
+
+		eval_handle = EvalHandle(encoder=encode_real_source, generator=fake_target, target=real_target,
+								source=real_source, embedding=embedding)
+
+		summary_handle = SummaryHandle(d_merged=d_merged_summary, g_merged=g_merged_summary)
+
+		#set self."input_handle" = input_handle
+		setattr(self, "input_handle", input_handle)
+		setattr(self, "loss_handle", loss_handle)
+		setattr(self, "eval_handle", eval_handle)
+		setattr(self, "summary_handle", summary_handle)
+
+	#model.sess = sess
+	def register_session(self, sess):
+		self.sess = sess
+
+	def retrieve_trainable_vars(self, freeze_encoder=False):
+		t_vars = tf.trainable_variables() #return trainable variables (trainable=True by default)
+
+		d_vars = [var for var in t_vars if 'd_' in var.name]
+		g_vars = [var for var in g_vars if 'g_' in var.name]
+
+		if freeze_encoder:
+			print("Freeze encoder weights!!!!!!!!!!!")
+			g_vars = [var for var in g_vars if not ("g_e" in var.name)]
+
+		return g_vars, d_vars
+
+	def retrieve_handles(self):
+		input_handle = getattr(self, "input_handle")
+		loss_handle = getattr(self, "loss_handle")
+		eval_handle = getattr(self, "eval_handle")
+		summary_handle = getattr(self, "summary_handle")
+
+		return input_handle, loss_handle, eval_handle, summary_handle
+
+	def get_model_id_and_dir(self): #get model id and directory
+		model_id = "experiment_%d_batch_%d" % (self.experiment_id, self.batch_size)
+		model_dir = os.path.join(self.checkpoint_dir, model_id)
+		return model_id, model_dir
+
+	def checkpoint(self, saver, step): #store the checkpoints in order to restore to previous state
+
+		model_name = "network.model"
+		model_id, model_dir = get_model_id_and_dir()
+
+		if not os.path.exists(model_dir):
+			os.makedirs(model_dir)
+		saver.save(self.sess, os.path.join(model_dir, model_name), global_step=step)
+
+	def restore_model(self, saver, model_dir):
+
+		checkpoint = tf.train.get_checkpoint_state(model_dir)
+
+		if checkpoint:
+			saver.restore(self.sess, checkpoint.model_checkpoint_path)
+			print("restored model %s" % model_dir)
+
+		else:
+			print("Failed to restore the model %s " % model_dir)
+
+	
+
+
+
+
+
+
+		
 dirr = '/home/linkwong/Zeroshot-GAN/model'
 reader = tf.WholeFileReader()
 directory = tf.train.string_input_producer(['/home/linkwong/Zeroshot-GAN/model/image.png'])
@@ -147,6 +345,8 @@ initialize = tf.global_variables_initializer()
 generator_dim = 64
 discriminator_dim = 64
 output_width = 256
+embedding_num = 40
+embedding_dim = 128
 
 model = network(dirr, batch_size=1)
 
@@ -170,6 +370,11 @@ with tf.Session() as sess:
 	e8, enc_layer = model.encoder(image_ten, is_training=True)
 	print(type(e8))
 	d8 = model.decoder(e8, enc_layer, 1, False, is_training=True)
-	print(d8.shape) 
+	print(d8.shape)
+
+	embedding = init_embedding(embedding_num, embedding_dim)
+	print(embedding.shape)
+
+
 	coord.request_stop()
 	coord.join(threads)
