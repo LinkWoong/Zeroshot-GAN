@@ -1,11 +1,11 @@
 # Zeroshot-GAN
 
-## Overview
+## Intro
 
-Cases of large computation memory consumptions are often encountered during the training process of the model, which requiring decent and expensive GPUs. Facing this regular issue, our group was wondering creating a model that does not take numerious of data during the training. Instead, we only use very small portion of data as training, such as 10% 
+GAN requires lots of training data, so we want to design a novel architecture that could help training data generation. Specifically, Chinese characters are used in this investigation. That is, we try to use limited training data to capture the writing style of user. The model could learn right now, however, requires 20% of target characters. For instance, if 10000 samples are desired so 2000 training set should be fed into the nets.
 
 ## Results
-
+TBA
 ## People
 
 This is my final year project in [Pattern Recognition & Machine Intelligence Laboratory](http://www.premilab.com/). PremiLab is a new lab set up by the [dean](https://scholar.google.com.hk/citations?user=3l5B0joAAAAJ&hl=en) of EEE department, XJTLU.
