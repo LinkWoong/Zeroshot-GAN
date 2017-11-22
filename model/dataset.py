@@ -115,6 +115,14 @@ class InjectDataProvider(object): #init embedding data provide
 		exampels = self.data.examples
 		batch_iter = get_batch_iter(examples, batch_size, augment=False)
 		for _, images in batch_iter: # inject embedding style!!!!!asshole
+			labels = [embedding_id] * batch_size
+			yield labels, images
+
+	def get_random_embedding_iter(self, batch_size, embedding_id):
+		examples = self.data.examples[:]
+		batch_iter = get_batch_iter(examples, batch_size, augment=False)
+
+		for _, images in batch_iter:
 			labels = [random.choice(embedding_id) for i in range(batch_size)]
 			yield labels, images
 

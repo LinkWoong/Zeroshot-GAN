@@ -280,7 +280,7 @@ class network(object):
 	def register_session(self, sess):
 		self.sess = sess
 
-	def retrieve_trainable_vars(self, freeze_encoder=False):
+	def retrieve_trainable_vars(self, freeze_encoder=False): #for tf.train.Saver()
 		t_vars = tf.trainable_variables() #return trainable variables (trainable=True by default)
 
 		d_vars = [var for var in t_vars if 'd_' in var.name]
@@ -325,11 +325,194 @@ class network(object):
 		else:
 			print("Failed to restore the model %s " % model_dir)
 
-	
+	def generate_fake_samples(self, input_images, embedding_id):
+		input_handle, loss_handle, eval_handle, summary_handle = self.retrieve_handles()
+		fake_images, real_images, discriminator_loss, generator_loss, l1_loss = self.sess.run([eval_handle.generator,
+																								eval_handle.target,
+																								loss_handle.d_loss,
+																								loss_handle.g_loss,
+																								loss_handle.l1_loss],
+																								feed_dict={
+																									input_handle.real_data: input_images,
+																									input_handle.embedding_id: embedding_id,
+																									input_handle.no_target_data: input_images,
+																									input_handle.no_target_id: embedding_id
+																								})
+
+		return fake_images, real_images, discriminator_loss, generator_loss, l1_loss
+
+	def validate_model(self, val_iter, epoch, step):
+		labels, images = next(val_iter) #retrieve the next val_iter
+		fake_images, real_images, discriminator_loss, generator_loss, l1_loss = self.generate_fake_samples(images, labels)
+		print("Sample: d_loss: %.5f, g_loss: %.5f, l1_loss: %.5f" % (discriminator_loss, generator_loss, l1_loss))
+
+		merge_fake_images = merge(scale_back(fake_iamges), [self.batch_size, 1])
+		merge_real_images = merge(scale_back(real_images), [self.batch_size, 1])
+		merge_pair = np.concatenate([merge_real_images, merge_fake_images], axis=1)
+
+		model_id, _ = self.get_model_id_and_dir()
+
+		model_sample_dir = os.path.join(self.sample_dir, model_id)
+		if not os.path.exists(model_sample_dir):
+			os.makedirs(model_sample_dir)
+
+		sample_img_path = os.path.join(model_sample_dir, "sample_%02d_%04d.png" % (epoch, step))
+		misc.imsave(sample_img_path, merge_pair) #save the sample image
+
+	def export_generator(self, save_dir, model_dir, model_name="gen_model"): #after freeze, the generator must be restored
+		saver = tf.train.Saver()
+		self.restore_model(saver, model_dir)
+
+		gen_saver = tf.train.Saver(var_list=self.retrieve_trainable_vars())
+		gen_saver.save(self.sess, os.path.join(save_dir, model_name), global_step=0)
 
 
+	def retrieve_gen_vars(self):
+
+		all_vars = tf.global_variables()
+		gen_vars = [var for var in all_vars if 'embedding' in var.name]
+		return gen_vars
+
+	def infer(self, source_obj, embedding_id, model_dir, save_dir):
+		source_provider = InjectDataProvider(source_obj) #retrieve the embedded style
+
+		if isinstance(embedding_id, int) or len(embedding_id) == 1:
+			embedding_id_sub = embedding_id if isinstance(embedding_id, int) else embedding_id[0]
+			source_iter = source_provider.get_single_embedding_iter(self.batch_size, embedding_id_sub)
+		else:
+			source_iter = source_provider.get_random_embedding_iter(self.batch_size, embedding_id)
+
+			tf.global_variables_initializer().run()
+			saver = tf.train.Saver(var_list=self.retrieve_gen_vars())
+			self.restore_model(saver, model_dir)
+
+		def save_images(images, count):
+			path = os.path.join(save_dir, "inferred_%04d.png" % count)
+			save_concat_images(images, img_path=path)
+			print("generated images saved at %s" % path)
+
+		count = 0
+		batch_buffer = list()
+
+		for labels, source_images in source_iter:
+			fake_images = self.generate_fake_samples(source_images, labels)
+			merged_fake_images = merge(scale_back(fake_images), [self.batch_size, 1])
+			batch_buffer.append(merged_fake_images)
+
+			if len(batch_buffer) == 10:
+				save_images(batch_buffer, count)
+				batch_buffer = list()
+			count += 1
+
+		if batch_buffer:
+			save_images(batch_buffer, count)
 
 
+	def train(self, lr=0.0002, epoch=100, schedule=10, resume=True, flip_labels=False,
+				freeze_encoder=False, fine_tune=None, sample_steps=50, checkpoint_steps=500):
+		gen_vars, dis_vars = self.retrieve_trainable_vars(freeze_encoder=freeze_encoder)
+		input_handle, loss_handle, _, summary_handle = self.retrieve_handles()
+
+		if not self.sess:
+			raise Exception("no self.sess = sess! Failed")
+
+		#hyperparameters and optimizers
+		learning_rate = tf.placeholder(tf.float32, name="learning_rate")
+		d_optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.5).minimize(loss_handle.d_loss, var_list=dis_vars)
+		g_optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, beta1=0.5).minimize(loss_handle.g_loss, var_list=gen_vars)
+
+		tf.global_variables_initializer().run()
+
+		#data load
+		real_data = input_handle.real_data
+		embedding_id = input_handle.embedding_id
+		no_target_data = input_handle.no_target_data
+		no_target_id = input_handle.no_target_id
+
+		data_provider = TrainDataProvider(self.data_dir, filter_by=fine_tune)
+		total_batch = data_provider.compute_total_batch_num(self.batch_size)
+		val_batch_iter = data_provider.get_val_iter(self.batch_size)
+
+		saver = tf.train.Saver(max_to_keep=3)
+		summary_writer = tf.summary.FileWriter(self.log_dir, self.sess.graph)
+
+		if resume: #restore the model, not necessary
+			_, model_dir = self.get_model_id_and_dir()
+			self.restore_model(saver, model_dir)
+
+		current_lr = lr
+		counter = 0
+		start_time = time.time()
+
+		for ei in range(epoch):
+			train_batch_iter = data_provider.get_train_iter(self.batch_size)
+			if (ei + 1) % 10 == 0:
+
+				update_lr = current_lr / 2.0
+				update_lr = max(update_lr, 0.0002)
+				print("decay learning rate from %.5f to %.5f" % (current_lr, update_lr))
+				current_lr = update_lr
+
+			for bid, batch in enumerate(train_batch_iter):
+				count += 1
+				labels, batch_images = batch
+				shuffled_id = labels[:]
+
+				if flip_labels:
+					np.random.shuffle(shuffled_id)
+
+
+				#method: first optimize D, then G, then optimize G again
+				_, batch_d_loss, d_summary = self.sess.run([d_optimizer, loss_handle.d_loss,
+															summary_handle.d_merged],
+															feed_dict={
+																real_data: batch_images,
+																embedding_id: labels,
+																learning_rate: current_lr,
+																no_target_data: batch_images,
+																no_target_id: shuffled_id
+															})
+
+				_, batch_g_loss = self.sess.run([g_optimizer, loss_handle.g_loss],
+												feed_dict={
+													real_data: batch_images,
+													embedding_id: labels,
+													learning_rate: current_lr,
+													no_target_data: batch_images,
+													no_target_id: shuffled_id
+												})
+
+				_, batch_g_loss, category_loss, cheat_loss, const_loss, l1_loss, tv_loss, g_summary = self.sess.run([g_optimizer,
+																													loss_handle.g_loss,
+																													loss_handle.category_loss,
+																													loss_handle.cheat_loss,
+																													loss_handle.const_loss,
+																													loss_hanle.l1_loss,
+																													loss_handle.tv_loss,
+																													summary_handle.g_merged],
+																													feed_dict={
+																														real_data: batch_images,
+																														embedding_id: labels,
+																														learning_rate: current_lr,
+																														no_target_data: batch_images,
+																														no_target_id: shuffled_id
+																													})
+
+				times = time.time() - start_time #time recording
+				logs = "Epoch %2d, %4d/%4d time: %4.4f, d_loss:%.5f, g_loss:%.5f, category_loss:%.5f, cheat_loss:%.5f, const_loss: %.5f, l1_loss:%.5f, tv_loss:%.5f"
+
+				print(logs % (ei, bid, total_batch, times, batch_d_loss, batch_g_loss,
+							category_loss, cheat_loss, const_loss, l1_loss, tv_loss))
+				summary_writer.add_summary(d_summary, counter)
+				summary_writer.add_summary(g_summary, counter)
+
+				if counter % sample_steps == 0:
+					self.validate_model(val_batch_iter, ei, counter)
+
+				if counter % checkpoint_steps == 0:
+					self.checkpoint(saver, counter)
+
+		self.checkpoint(saver, counter)
 
 
 		
