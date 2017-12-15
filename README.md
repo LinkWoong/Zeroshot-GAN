@@ -12,7 +12,8 @@ and for the encoder part
 
 ## Results
 <img src="https://raw.githubusercontent.com/LinkWoong/Zeroshot-GAN/master/images/combine006.png" width="900px"/> 
-The left one is generated characters, and the right one is handwriting.
+The left one is generated characters, and the right one is handwriting. 
+However, the dataset is still too large (2000+ samples). For the next half part dataset enrichment will be the first issue.
 
 ## People
 
