@@ -6,7 +6,9 @@ GAN requires lots of training data, so we want to design a novel architecture th
 
 ## Results
 <img src="https://raw.githubusercontent.com/LinkWoong/Zeroshot-GAN/master/images/combine006.png" width="900px"/> 
-Left: Generated Characters                  Right:Real Characters
+Left: Generated Characters &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;                 Right:Real Characters 
+
+
 ## People
 
 This is my final year project in [Pattern Recognition & Machine Intelligence Laboratory](http://www.premilab.com/). PremiLab is a new lab set up by the [dean](https://scholar.google.com.hk/citations?user=3l5B0joAAAAJ&hl=en) of EEE department, XJTLU.
