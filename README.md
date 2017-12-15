@@ -6,8 +6,7 @@ GAN requires lots of training data, so we want to design a novel architecture th
 
 ## Results
 <img src="https://raw.githubusercontent.com/LinkWoong/Zeroshot-GAN/master/images/combine006.png" width="900px"/> 
-Left: Generated Characters &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;                 Right:Real Characters 
-
+The left one is generated characters, and the right one is handwriting.
 
 ## People
 
