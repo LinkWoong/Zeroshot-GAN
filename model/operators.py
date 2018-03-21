@@ -160,7 +160,7 @@ def mini_batch_dis(x, num_kernels=100, dim_kernel=5, init=False, name='MD'): #de
 			1-tf.expand_dims(tf.constant(np.eye(batch_size), dtype=np.float32), 1))
 	out = tf.reduce_sum(tf.exp(-diff),2) / tf.reduce_sum(tf.exp(-diff))
 	return tf.concat([x, diff], 1)
-
+	
 def conv2d(x, output_filters, kh=5, kw=5, sh=2, sw=2, stddev=0.02, scope="conv2d"):
 	with tf.variable_scope(scope):
 		shape = x.get_shape().as_list()
