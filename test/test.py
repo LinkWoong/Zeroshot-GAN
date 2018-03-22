@@ -18,10 +18,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--train_dir', default='./train_images/', help='Training directory')
 parser.add_argument('--test_dir', default='./test_images/', help='Testing directory')
 parser.add_argument('--save_dir', default='./save_images', help='Saving directory')
-parser.add_argument('--training_epoch', default=20, help='Number of training epoches')
-parser.add_argument('--is_training', default=1, help='Status of training')
-parser.add_argument('--is_testing', default=0, help='Status of testing')
-parser.add_argument('--batch_size', default=10, help='Number of batch_size')
+parser.add_argument('--training_epoch', default=20, type=int, help='Number of training epoches')
+parser.add_argument('--is_training', default=1, type=int, help='Status of training')
+parser.add_argument('--is_testing', default=0, type=int, help='Status of testing')
+parser.add_argument('--batch_size', default=10, type=int, help='Number of batch_s	ize')
 parser.add_argument('--D_learning_rate', default=0.0002, help='Discriminator learning rate')
 parser.add_argument('--G_learning_rate', default=0.0002, help='Generator learning rate')
 
@@ -107,6 +107,7 @@ def unit_test(dataset):
 	count = 0
 	iterator = dataset.make_one_shot_iterator()
 	one_element = iterator.get_next()
+
 	with tf.Session() as sess:
 		try:
 			while True:
@@ -160,7 +161,6 @@ class data(object):
 					self.train_label.append(train_label)
 					self.train_filenames.append(train_filenames)
 
-
 			return self.train_data, self.train_label
 
 		if(self.is_testing):
@@ -198,15 +198,29 @@ class data(object):
 		Load the data and store into imgs
 		"""
 		train_data, train_label = self.load_raw_data()
-		for i in range(len(train_data)):
-			count = 0
-			for item in train_data[i]:
-				item = item.reshape(3, 32, 32)
-				item = item.transpose(1, 2, 0)
-				if not os.path.exists('/media/linkwong/File/Ubuntus/cifar-10-batches-py/train_image'):
-					misc.imsave('/media/linkwong/File/Ubuntus/cifar-10-batches-py/train_image/'+ self.train_filenames[i][count], item)
-					count += 1
-		#print train_data[0][0].shape
+		if self.is_training:
+			for i in range(len(train_data)):
+				count = 0
+				for item in train_data[i]:
+					item = item.reshape(3, 32, 32)
+					item = item.transpose(1, 2, 0)
+					if not os.path.exists(self.training_path + 'train_image/'):
+						os.mkdir(self.training_path + 'train_image/')
+						misc.imsave(self.training_path + 'train_image/' + self.train_filenames[i][count], item)
+						count += 1
+			#print train_data[0][0].shape
+
+		elif self.is_testing:
+			for i in range(len(train_data)):
+				count = 0
+				for item in train_data[i]:
+					item = item.reshape(3, 32, 32)
+					item = item.transpose(1, 2, 0)
+					if not os.path.exists(self.testing_path + 'test_image/'):
+						os.mkdir(self.testing_path + 'test_image/')
+						misc.imsave(self.testing_path + 'test_image/' + self.train_filenames[i][count], item)
+						count += 1
+
 		return train_data, train_label, self.train_filenames
 
 #------------------------------model-build---------------------------------------
@@ -225,7 +239,8 @@ class model(object):
 		self.is_training = is_training
 		self.is_testing = is_testing
 		self.batch_size = batch_size
-		self.learning_rate = learning_rate
+		self.D_learning_rate = D_learning_rate
+		self.G_learning_rate = G_learning_rate
 		self.D_iter = D_iter
 		self.G_iter = G_iter
 		self.stddev = stddev
@@ -236,21 +251,33 @@ class model(object):
 		"""
 		Load data into tensors
 		"""
-		ass = data(self.train_dir, self.test_dir, is_training=1)
+		ass = data(self.train_dir, self.test_dir, is_training=self.is_training, is_testing=self.is_testing)
 		train_data, train_label, train_filenames = ass.load_and_save_data()
 		#print len(train_data), len(train_label), len(train_filenames) #5, 5, 5
 
-		new_train_filenames = []
+		if self.is_training:
+			new_train_filenames = []
 
-		for i in range(len(train_filenames)):
-			for item in train_filenames[i]:
-				new_train_filenames.append('/media/linkwong/File/Ubuntus/cifar-10-batches-py/train_image/' + item)
+			for i in range(len(train_filenames)):
+				for item in train_filenames[i]:
+					new_train_filenames.append(self.train_dir + '/train_image/' + item)
 
-		#print len(new_train_filenames)
+			#print len(new_train_filenames)
 
-		tf_filenames = tf.constant(new_train_filenames)
-		dataset = tf.data.Dataset.from_tensor_slices(tf_filenames)
-		dataset = dataset.map(parse_file)
+			tf_filenames = tf.constant(new_train_filenames)
+			dataset = tf.data.Dataset.from_tensor_slices(tf_filenames)
+			dataset = dataset.map(parse_file)
+
+		elif self.is_testing:
+			new_test_filenames = []
+
+			for i in range(len(train_filenames)):
+				for item in train_filenames[i]:
+					new_test_filenames.append(self.test_dir + '/test_image/' + item)
+
+			tf_filenames = tf.constant(new_test_filenames)
+			dataset = tf.data.Dataset.from_tensor_slices(tf_filenames)
+			dataset = dataset.map(parse_file)
 
 		return dataset.shuffle(buffer_size=1000).batch(self.batch_size).repeat(10)
 
@@ -270,7 +297,7 @@ class model(object):
 		dataset = tf.data.Dataset.from_tensor_slices(tf_filenames)
 		dataset = dataset.map(parse_file)
 
-		return dataset.shuffle(buffer_size=1000).batch(self.batch_size).repeat(10)
+		return dataset.shuffle(buffer_size=1000).batch(self.batch_size).repeat(100)
 
 	def generator(self, x, is_training=True, reuse=False, scope='generator'):
 
@@ -340,19 +367,14 @@ class model(object):
 		GAN model build and loss functions set up
 		"""
 
-		train_dataset = self.load_test_data()
-		iterator = train_dataset.make_one_shot_iterator()
-		one_element = iterator.get_next()
-
-		num_of_data = unit_test(train_dataset)
-		x = tf.placeholder(tf.float32, shape=(self.batch_size, 32, 32, 3)) # training examples
+		x = tf.placeholder(tf.float32, shape=(None, 32, 32, 3)) # training examples
 		z = tf.placeholder(tf.float32, shape=(None, 1, 1, 100)) # Noises that feed to the generator 
 		is_training = tf.placeholder(tf.bool)
 
-		G_z = ass.generator(z, is_training=is_training)
-		D_real, D_real_logits = ass.discriminator(x, is_training=is_training) # D_real: the real convoluted training examples 
+		G_z = self.generator(z, is_training=is_training)
+		D_real, D_real_logits = self.discriminator(x, is_training=is_training) # D_real: the real convoluted training examples 
 																			 # D_real_logit: the convoluted but not activated training examples
-		D_fake, D_fake_logits = ass.discriminator(G_z, is_training=is_training, reuse=True)
+		D_fake, D_fake_logits = self.discriminator(G_z, is_training=is_training, reuse=True)
 
 		D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones([self.batch_size, 1, 1, 3]), logits=D_real_logits))
 		D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.zeros([self.batch_size, 1, 1, 3]), logits=D_fake_logits))
@@ -383,35 +405,45 @@ class model(object):
 			D_losses = []
 			G_losses = []
 
-			current_epoch = i
+			train_dataset = self.load_test_data()
+			iterator = train_dataset.make_one_shot_iterator()
+			one_element = iterator.get_next()
 
-			for j in range(num_of_data / self.batch_size):
+			num_of_data = unit_test(train_dataset)
+
+			#print "Start building the model with dataset length", num_of_data
+
+			current_epoch = i
+ 			for j in range(num_of_data / self.batch_size):
+				#print "Current inter-index", j
 
 				temp = sess.run(one_element)
+				#print temp.shape
 				z_ = np.random.normal(0, 1, (self.batch_size, 1, 1, 100))
 				loss_d, _ = sess.run([D_loss_total, D_optimize], feed_dict={x: temp, z: z_, is_training: True})
 
+				#print "loss d is", loss_d
 				D_losses.append(loss_d)
 
 				z_ = np.random.normal(0, 1, (self.batch_size, 1, 1, 100))
 				loss_g, _ = sess.run([G_loss_total, G_optimize], feed_dict={x: temp, z: z_, is_training: True})
 
+				#print "loss g is", loss_g
 				G_losses.append(loss_g)
 
-				test_image = sess.run(G_z, feed_dict={z: fixed_z, is_training: False})
-				
-				random_index = np.random.random_integers(0, self.batch_size)
-
 				if(i == current_epoch):
-					temp_dir = self.save_dir + 'result_' + str(current_epoch) + '.png'
+
+					test_image = sess.run(G_z, feed_dict={z: fixed_z, is_training: True})
+					random_index = np.random.random_integers(0, self.batch_size - 1)
+					temp_dir = self.save_dir + '/result_' + str(current_epoch) + '.png'
 					self.save_image(test_image[random_index], temp_dir)
 					current_epoch = 0
 
 			print "Current epoch", i
 			train_history['D_losses'].append(np.mean(D_losses))
 			train_history['G_losses'].append(np.mean(G_losses))
-			print "Current D_losses", train_history.get('D_losses')
-			print "Current G_losses", train_history.get('G_losses')
+			print "Current D_losses", np.mean(train_history.get('D_losses'))
+			print "Current G_losses", np.mean(train_history.get('G_losses'))
 
 		if (i < (num_of_data / self.batch_size)):
 			print "Epoch number is smaller than batch_size"
@@ -426,3 +458,7 @@ def main(argv):
 	ass = model(train_dir=args.train_dir, test_dir=args.test_dir, save_dir=args.save_dir, training_epoch=args.training_epoch,
 			batch_size=args.batch_size, is_training=args.is_training, is_testing=args.is_testing)
 	result = ass.build_model()
+
+if __name__ == '__main__':
+	tf.logging.set_verbosity(tf.logging.INFO)
+	tf.app.run(main)
