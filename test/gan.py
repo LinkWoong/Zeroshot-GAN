@@ -197,8 +197,8 @@ class data(object):
 		"""
 		Load the data and store into imgs
 		"""
-		train_data, train_label = self.load_raw_data()
 		if self.is_training:
+			train_data, train_label = self.load_raw_data()
 			for i in range(len(train_data)):
 				count = 0
 				for item in train_data[i]:
@@ -211,6 +211,7 @@ class data(object):
 			#print train_data[0][0].shape
 
 		elif self.is_testing:
+			train_data, train_label = self.load_raw_data()
 			for i in range(len(train_data)):
 				count = 0
 				for item in train_data[i]:
@@ -285,7 +286,7 @@ class model(object):
 		"""
 		Load the test 100 images for model testing
 		"""
-		test_path = '/media/linkwong/File/Ubuntus/cifar-10-batches-py/test_image/'
+		test_path = '/home/chenhui.wang14/cifar-10/train_image/'
 
 		filenames = []
 
@@ -387,8 +388,10 @@ class model(object):
 		D_vars = [var for var in T_vars if var.name.startswith('discriminator')]
 		G_vars = [var for var in T_vars if var.name.startswith('generator')]
 
-		D_optimize = tf.train.AdamOptimizer(D_learning_rate, beta1=0.5).minimize(D_loss_total)
-		G_optimize = tf.train.AdamOptimizer(G_learning_rate, beta1=0.5).minimize(G_loss_total)
+		with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
+			
+			D_optimize = tf.train.AdamOptimizer(D_learning_rate, beta1=0.5).minimize(D_loss_total)
+			G_optimize = tf.train.AdamOptimizer(G_learning_rate, beta1=0.5).minimize(G_loss_total)
 
 		sess = tf.InteractiveSession()
 		tf.global_variables_initializer().run()
@@ -414,6 +417,7 @@ class model(object):
 			#print "Start building the model with dataset length", num_of_data
 
 			current_epoch = i
+
  			for j in range(num_of_data / self.batch_size):
 				#print "Current inter-index", j
 
