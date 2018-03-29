@@ -11,7 +11,8 @@ import os
 import pickle
 import scipy.misc as misc
 import random
-
+import logging
+logging.getLogger('tensorflow').disabled = True
 #------------------------CL Setting-----------------------
 
 parser = argparse.ArgumentParser()
@@ -19,15 +20,15 @@ parser.add_argument('--train_dir', default='./train_images/', help='Training dir
 parser.add_argument('--test_dir', default='./test_images/', help='Testing directory')
 parser.add_argument('--save_dir', default='./save_images', help='Saving directory')
 parser.add_argument('--training_epoch', default=20, type=int, help='Number of training epoches')
-parser.add_argument('--is_training', default=1, type=int, help='Status of training')
-parser.add_argument('--is_testing', default=0, type=int, help='Status of testing')
-parser.add_argument('--batch_size', default=10, type=int, help='Number of batch_s	ize')
-parser.add_argument('--D_learning_rate', default=0.1, help='Discriminator learning rate')
-parser.add_argument('--G_learning_rate', default=0.1, help='Generator learning rate')
-parser.add_argument('--num_of_data', default=50000, help='Number of training examples')
+parser.add_argument('--is_training', default=True, type=bool, help='Status of training')
+parser.add_argument('--is_testing', default=False, type=bool, help='Status of testing')
+parser.add_argument('--batch_size', default=10, type=int, help='Number of batch_size')
+parser.add_argument('--D_learning_rate', default=0.00001, type=float,help='Discriminator learning rate')
+parser.add_argument('--G_learning_rate', default=0.00001, type=float,help='Generator learning rate')
+parser.add_argument('--num_of_data', default=50000, type=int, help='Number of training examples')
 
 #-----------------------Parameter Setting-----------------
-log_device_placement = True
+#log_device_placement = True
 
 IMAGE_WIDTH = 32
 IMAGE_HEIGHT = 32
@@ -47,7 +48,7 @@ D_iter = 5
 G_iter = 1
 
 batch_size = 10
-gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.8)
+gpu_options = True
 
 training_path = '/media/linkwong/File/Ubuntus/cifar-10-batches-py/train'
 testing_path = '/media/linkwong/File/Ubuntus/cifar-10-batches-py/test'
@@ -61,9 +62,9 @@ save_dir = '/media/linkwong/File/Ubuntus/dump/'
 def batch_normalization(x, is_training):
 	return tf.layers.batch_normalization(x, training=is_training)
 
-def conv2d(x, output_dim, k_h=5, k_w=5, d_h=2, d_w=2, stddev=0.01, scope="conv2d"):
+def conv2d(x, output_dim, k_h=5, k_w=5, d_h=2, d_w=2, stddev=0.01, name="conv2d"):
 	#print x.get_shape()
-	with tf.variable_scope(scope):
+	with tf.variable_scope(name):
 		weight = tf.get_variable('w', shape=[k_h, k_w, x.get_shape()[-1], output_dim], 
 								initializer=tf.truncated_normal_initializer(stddev=stddev))
 		bias = tf.get_variable('b', shape=[output_dim], initializer=tf.constant_initializer(0.0))
@@ -73,9 +74,9 @@ def conv2d(x, output_dim, k_h=5, k_w=5, d_h=2, d_w=2, stddev=0.01, scope="conv2d
 
 	return weight_conv
 
-def deconv2d(x, output_dim, k_h=5, k_w=5, d_h=2, d_w=2, stddev=0.01, scope="deconv2d"):
+def deconv2d(x, output_dim, k_h=5, k_w=5, d_h=2, d_w=2, stddev=0.01, name="deconv2d"):
 	print x.get_shape()
-	with tf.variable_scope(scope):
+	with tf.variable_scope(name):
 		weight = tf.get_variable('w', shape=[k_h, k_w, output_dim[-1], x.get_shape()[-1]], 
 								initializer=tf.truncated_normal_initializer(stddev=stddev))
 		bias = tf.get_variable('b', shape=[output_dim[-1]], initializer=tf.constant_initializer(0.0))
@@ -87,7 +88,7 @@ def deconv2d(x, output_dim, k_h=5, k_w=5, d_h=2, d_w=2, stddev=0.01, scope="deco
 
 def linear(x, output_dim ,scope=None, stddev=0.02, bias_start=0.0):
 	shape = x.get_shape().as_list()
-	print shape
+	#print shape
 	with tf.variable_scope(scope):
 		matrix = tf.get_variable("matrix", shape=[shape[1], output_dim], dtype=tf.float32, 
 								initializer=tf.random_normal_initializer(stddev=stddev))
@@ -127,6 +128,63 @@ def unit_test(dataset):
 
 	return count
 
+
+def prepare_input(data=None, labels=None):
+
+	"""
+	normalize
+	"""
+	image_height = 32
+	image_width = 32
+	image_depth = 3
+
+	assert(data.shape[1] == image_height * image_width * image_depth)
+	assert(data.shape[0] == labels.shape[0])
+
+	mu = np.mean(data, axis=0)
+	mu = mu.reshape(1,-1)
+
+	sigma = np.std(data, axis=0)
+	sigma = sigma.reshape(1, -1)
+	data = data - mu
+	data = data / sigma
+	is_nan = np.isnan(data)
+	is_inf = np.isinf(data)
+	if np.any(is_nan) or np.any(is_inf):
+	    print('data is not well-formed : is_nan {n}, is_inf: {i}'.format(n= np.any(is_nan), i=np.any(is_inf)))
+	    #data is transformed from (no_of_samples, 3072) to (no_of_samples , image_height, image_width, image_depth)
+	    #make sure the type of the data is no.float32
+
+	data = data.reshape([-1,image_depth, image_height, image_width])
+	data = data.transpose([0, 2, 3, 1])
+	data = data.astype(np.float32)
+	noise = np.random.normal(loc=0.0, scale=1.0, size=data.shape)
+
+	data = data + noise
+	return data, labels
+
+def unpickle(relpath): 
+    with open(relpath, 'rb') as fp:
+        d = pickle.load(fp)
+    return d
+
+def read_cifar10(filename): # queue one element
+
+	class CIFAR10Record(object):
+		pass
+	result = CIFAR10Record()
+
+	label_bytes = 1  # 2 for CIFAR-100
+	result.height = 32
+	result.width = 32
+	result.depth = 3
+
+	data = unpickle(filename)
+
+	value = np.asarray(data.get('data')).astype(np.float32)
+	labels = np.asarray(data.get('labels')).astype(np.int32)
+
+	return prepare_input(value,labels)
 #---------------------Data Handling-----------------------
 
 class data(object):
@@ -256,7 +314,7 @@ class model(object):
 		self.stddev = stddev
 		self.drop_out = drop_out
 		self.alpha = alpha
-		self.sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+		self.sess = tf.Session()
 		self.num_of_data = num_of_data
 
 	def load_data(self):
@@ -297,7 +355,7 @@ class model(object):
 		"""
 		Load the test 100 images for model testing
 		"""
-		test_path = '/media/linkwong/File/Ubuntus/cifar-10-batches-py/test_image'
+		test_path = '/home/chenhui/fyp/cifar-10/test_image/'
 
 		filenames = []
 
@@ -311,6 +369,36 @@ class model(object):
 
 		return dataset
 
+	def load_prepared_data(self):
+		"""
+		Load the prepared data
+		"""
+		data_dir = '/home/chenhui/fyp/cifar-10/train/'
+		filenames = [os.path.join(data_dir, 'data_batch_%d' % i) for i in xrange(1, 6)]
+
+		for idx, filename in enumerate(filenames):
+			temp_X, temp_y = read_cifar10(filename)
+			if idx == 0:
+				dataX = temp_X
+				labely = temp_y
+			else:
+				dataX = np.append(dataX, temp_X)
+				labely = np.append(labely, temp_y)
+			dataX = dataX.reshape([-1, 32, 32, 3])
+
+		seed = 547
+		np.random.seed(seed)
+		np.random.shuffle(dataX)
+		np.random.seed(seed)
+		np.random.shuffle(labely)
+
+		y_vec = np.zeros((len(labely), 10), dtype=np.float)
+		for i, label in enumerate(labely):
+			y_vec[i, labely[i]] = 1.0
+
+		return dataX / 255., y_vec
+
+
 	def generator(self, x, is_training=True, reuse=False, scope='generator'):
 
 		"""
@@ -322,96 +410,34 @@ class model(object):
 		print "Reaching generator"
 
 		x = tf.convert_to_tensor(x, dtype=tf.float32)
-		x = tf.expand_dims(tf.expand_dims(x, 1), 1)
 
 		with tf.variable_scope('generator',reuse=reuse):
 
 			#x = linear(x, 512*2*2, scope='g_fc_1')
 			#x = tf.reshape(x, shape=[self.batch_size, 2, 2, 512])
 
-			x_deconv_1 = tf.layers.conv2d_transpose(x, filters=1024, kernel_size=4, padding='valid', kernel_initializer=tf.random_normal_initializer(mean=0.0, stddev=0.02), 
-													trainable=self.is_training, name='x_deconv_1')
+			x_deconv_1 = linear(x, 512*2*2, scope='x_deconv_1')
+			x_deconv_1 = tf.reshape(x_deconv_1, [self.batch_size, 2, 2, 512])
 			x_deconv_1_ac = tf.layers.batch_normalization(x_deconv_1, training=self.is_training, name='x_deconv_1_bn')
 			x_deconv_1_ac = tf.nn.leaky_relu(x_deconv_1_ac, name='x_deconv_1_ac')
 
-			x_deconv_2 = tf.layers.conv2d_transpose(x_deconv_1_ac, filters=256, kernel_size=4, strides=2, padding='same', kernel_initializer=tf.random_normal_initializer(mean=0.0, stddev=0.02),
-													trainable=self.is_training, name='x_deconv_2')
+			x_deconv_2 = deconv2d(x_deconv_1_ac, [self.batch_size, 4, 4, 256], 5, 5, 2, 2, name='x_deconv_2')
 			x_deconv_2_ac = tf.layers.batch_normalization(x_deconv_2, training=self.is_training, name='x_deconv_2_bn')
 			x_deconv_2_ac = tf.nn.leaky_relu(x_deconv_2_ac, name='x_deconv_2_ac')
 
-			x_deconv_3 = tf.layers.conv2d_transpose(x_deconv_2_ac, filters=64, kernel_size=4, strides=2, padding='same', kernel_initializer=tf.random_normal_initializer(mean=0.0, stddev=0.02),
-													trainable=self.is_training, name='x_deconv_3')
+			x_deconv_3 = deconv2d(x_deconv_2_ac, [self.batch_size, 8, 8, 128], 5, 5, 2, 2, name='x_deconv_3')
 			x_deconv_3_ac = tf.layers.batch_normalization(x_deconv_3, training=self.is_training, name='x_deconv_3_bn')
 			x_deconv_3_ac = tf.nn.leaky_relu(x_deconv_3_ac, name='x_deconv_3_ac')
 
-			x_deconv_4 = tf.layers.conv2d_transpose(x_deconv_3_ac, filters=3, kernel_size=4, strides=2, padding='same', kernel_initializer=tf.random_normal_initializer(mean=0.0, stddev=0.02),
-													trainable=self.is_training, name='x_deconv_4')
-			#x_deconv_4_ac = leaky_relu(batch_normalization(x_deconv_4, is_training=is_training), alpha=self.alpha)
+			x_deconv_4 = deconv2d(x_deconv_3_ac, [self.batch_size, 16, 16, 64], 5, 5, 2, 2, name='x_deconv_4')
+			x_deconv_4_ac = tf.layers.batch_normalization(x_deconv_4, training=self.is_training, name='x_deconv_4_bn')
+			x_deconv_4_ac = tf.nn.leaky_relu(x_deconv_4_ac, name='x_deconv_4_ac')
 
-			x_out = tf.nn.tanh(x_deconv_4, name='x_out')
+			x_out = deconv2d(x_deconv_4_ac, [self.batch_size, 32, 32, 3], 5, 5, 2, 2, name='x_deconv_5')
+			x_out = tf.nn.tanh(x_out, name='x_out')
 
-			'''
-			if tf.is_nan(x_deconv_4) is not None:
-				print "Error! The tensor is NaN"
 
-			elif tf.is_nan(x_out) is not None:
-				print "Error! The tensorf is NaN"
-			'''
-		#print x_out.get_shape()
 		return x_out
-
-	def generator_with_debug(self, x, is_training=True, reuse=False, scope='generator'):
-
-		"""
-		G(z) Implementation
-		The generator that learns data distribution
-		Use Deep Convolution Layers instead of FC layers
-
-		"""
-		print "Reaching generator"
-		x = tf.convert_to_tensor(x, dtype=tf.float32)
-		
-		if any(tf.is_nan(x)):
-			print "Error! NaN at the beginning!"
-		with tf.variable_scope('generator',reuse=reuse):
-
-			x = linear(x, 512*2*2, scope='g_fc_1')
-
-			if not any(tf.is_nan(x)):
-				print "Error! NaN after fully connection"
-			x = tf.reshape(x, shape=[self.batch_size, 2, 2, 512])
-
-			if not any(tf.is_nan(x)):
-				print "Error! NaN after reshape"
-			x_deconv_1 = deconv2d(x, [self.batch_size, 4, 4, 256], 5, 5, 2, 2, scope='x_deconv_1')
-
-			if not any(tf.is_nan(x_deconv_1)):
-				print "Error! NaN at x_deconv_1"
-			x_deconv_1_ac = leaky_relu(batch_normalization(x_deconv_1, is_training=is_training), alpha=self.alpha)
-
-			if not any(tf.is_nan(x_deconv_1_ac)):
-				print "Error! NaN at x_deconv_1_ac"
-			x_deconv_2 = deconv2d(x_deconv_1_ac, [self.batch_size, 8, 8, 128], 5, 5, 2, 2, scope='x_deconv_2')
-			x_deconv_2_ac = leaky_relu(batch_normalization(x_deconv_2, is_training=is_training), alpha=self.alpha)
-
-			x_deconv_3 = deconv2d(x_deconv_2_ac, [self.batch_size, 16, 16, 64], 5, 5, 2, 2, scope='x_deconv_3')
-			x_deconv_3_ac = leaky_relu(batch_normalization(x_deconv_3, is_training=is_training), alpha=self.alpha)
-
-			x_deconv_4 = deconv2d(x_deconv_3_ac, [self.batch_size, 32, 32, 3], 5, 5, 2, 2, scope='x_deconv_4')
-			x_deconv_4_ac = leaky_relu(batch_normalization(x_deconv_4, is_training=is_training), alpha=self.alpha)
-
-			x_out = tf.nn.tanh(x_deconv_4_ac, name='x_out')
-
-			'''
-			if tf.is_nan(x_deconv_4) is not None:
-				print "Error! The tensor is NaN"
-
-			elif tf.is_nan(x_out) is not None:
-				print "Error! The tensorf is NaN"
-			'''
-		#print x_out.get_shape()
-		return x_out
-
 
 	def discriminator(self, x, is_training=True, reuse=False, scope='discriminator'):
 		"""
@@ -423,35 +449,27 @@ class model(object):
 
 		with tf.variable_scope('discriminator', reuse=reuse):
 			print "The shape of generated is ", x.get_shape()
-			x_conv_1 = tf.layers.conv2d(x, filters=64, kernel_size=4, strides=2, padding='same', kernel_initializer=tf.random_normal_initializer(mean=0.0, stddev=0.02),
-										trainable=self.is_training, name='x_conv_1')
+			x_conv_1 = conv2d(x, 64, 5, 5, 2, 2, name='x_conv_1')
 			x_conv_1_ac = tf.nn.leaky_relu(x_conv_1, name='x_conv_1_ac')
 
-			x_conv_2 = tf.layers.conv2d(x_conv_1_ac, filters=256, kernel_size=4, strides=2, padding='same', kernel_initializer=tf.random_normal_initializer(mean=0.0, stddev=0.02),
-										trainable=self.is_training, name='x_conv_2')
+			x_conv_2 = conv2d(x_conv_1_ac, 128, 5, 5, 2, 2, name='x_conv_2')
 			x_conv_2_ac = tf.layers.batch_normalization(x_conv_2, training=self.is_training, name='x_conv_2_bn')
 			x_conv_2_ac = tf.nn.leaky_relu(x_conv_2_ac, name='x_conv_2_ac')
 
-			x_conv_3 = tf.layers.conv2d(x_conv_2_ac, filters=1024, kernel_size=4, strides=2, padding='same', kernel_initializer=tf.random_normal_initializer(mean=0.0, stddev=0.02),
-										trainable=self.is_training, name='x_conv_3')
+			x_conv_3 = conv2d(x_conv_2_ac, 256, 5, 5, 2, 2, name='x_conv_3')
 			x_conv_3_ac = tf.layers.batch_normalization(x_conv_3, training=self.is_training, name='x_conv_3_bn')
 			x_conv_3_ac = tf.nn.leaky_relu(x_conv_3_ac, name='x_conv_3_ac')
 
-			x_conv_4 = tf.layers.conv2d(x_conv_3_ac, filters=1, kernel_size=4, padding='valid', kernel_initializer=tf.random_normal_initializer(mean=0.0, stddev=0.02),
-										trainable=self.is_training, name='x_conv_4')
+			x_conv_4 = conv2d(x_conv_3_ac, 512, 5, 5, 2, 2, name='x_conv_4')
 			x_conv_4_ac = tf.layers.batch_normalization(x_conv_4, training=self.is_training, name='x_conv_4_bn')
 			x_conv_4_ac = tf.nn.leaky_relu(x_conv_4_ac, name='x_conv_4_ac')
 
-			x_out = tf.nn.sigmoid(x_conv_4_ac, name='x_out')
+			x_conv_4_ac = tf.reshape(x_conv_4_ac, [self.batch_size, -1])
 
-			x_out = tf.squeeze(x_out, [1, 2, 3])
-			'''
-			if tf.is_nan(x_conv_5) is not None:
-				print "Error! The tensor is NaN"
-			elif tf.is_nan(x_out) is not None:
-				print "Error! The tensorf is NaN"
-			'''
-		return x_out
+			x_out_logit = linear(x_conv_4_ac, 1, scope='x_out_logit')
+			x_out = tf.nn.sigmoid(x_out_logit)
+
+		return x_out, x_out_logit ,x_conv_4_ac
 
 	def save_image(self, x, path):
 		"""
@@ -466,47 +484,60 @@ class model(object):
 		"""
 		with tf.Graph().as_default():
 
-			train_dataset = self.load_test_data()
-			train_dataset = train_dataset.shuffle(buffer_size=1000).batch(self.batch_size).repeat(self.training_epoch)
-			iterator = train_dataset.make_one_shot_iterator()
-			one_element = iterator.get_next()
+			train_data, train_label = self.load_prepared_data()
+
+			print "The shape of train_data is ", train_data.shape
+			#train_dataset = train_dataset.shuffle(buffer_size=1000).batch(self.batch_size).repeat(self.training_epoch)
+			#iterator = train_dataset.make_one_shot_iterator()
+			#one_element = iterator.get_next()
+
+			noise_limit = 0.35
+			L2_PENALTY = 0.02
 
 			x = tf.placeholder(tf.float32, shape=(self.batch_size, 32, 32, 3)) # training examples
 			z = tf.placeholder(tf.float32, shape=(self.batch_size, 100)) # Noises that feed to the generator 
 			is_training = tf.placeholder(tf.bool)
-			
-			G_z = self.generator(z, is_training=is_training)
-			D_real = self.discriminator(x, is_training=is_training) # D_real: the real convoluted training examples 
-																				 # D_real_logit: the convoluted but not activated training examples
-			D_fake = self.discriminator(G_z, is_training=is_training, reuse=True)
 
-			D_loss_real = tf.losses.sigmoid_cross_entropy(tf.constant(1, shape=[self.batch_size]), D_real, scope='D_loss_real')
-			D_loss_fake = tf.losses.sigmoid_cross_entropy(tf.constant(0, shape=[self.batch_size]), D_fake, scope='D_loss_fake')
+			G_z = self.generator(z, is_training=is_training)
+			D_real, D_real_logits, _ = self.discriminator(x, is_training=is_training) # D_real: the real convoluted training examples 
+																				 # D_real_logit: the convoluted but not activated training examples
+			D_fake, D_fake_logits, _ = self.discriminator(G_z, is_training=is_training, reuse=True)
+
+			D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=tf.ones_like(D_real)))
+			D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.zeros_like(D_fake)))
 
 			D_loss_total = D_loss_real + D_loss_fake
 
-			G_loss_total = tf.losses.sigmoid_cross_entropy(tf.constant(1, shape=[self.batch_size]), D_fake)
+			G_loss_total = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.ones_like(D_fake)))
 
 			T_vars = tf.trainable_variables()
 			D_vars = [var for var in T_vars if var.name.startswith('discriminator')]
 			G_vars = [var for var in T_vars if var.name.startswith('generator')]
 			
-			D_optimize = tf.train.AdamOptimizer(self.D_learning_rate).minimize(D_loss_total)
-			G_optimize = tf.train.AdamOptimizer(self.G_learning_rate).minimize(G_loss_total)
+			D_optimize = tf.train.AdamOptimizer(self.D_learning_rate, beta1=0.5).minimize(D_loss_total, var_list=D_vars)
+			G_optimize = tf.train.AdamOptimizer(self.G_learning_rate, beta1=0.5).minimize(G_loss_total, var_list=G_vars)
 
-			gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.8)
-			sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+			D_loss_real_sum = tf.summary.scalar("D_loss_real", D_loss_real)
+			D_loss_fake_sum = tf.summary.scalar("D_loss_fake", D_loss_fake)
+			D_loss_total_sum = tf.summary.scalar("D_loss_total", D_loss_total)
+			G_loss_total_sum =  tf.summary.scalar("G_loss_total", G_loss_total)
+
+			G_sum = tf.summary.merge([D_loss_fake_sum, G_loss_total_sum])
+			D_sum = tf.summary.merge([D_loss_real_sum, D_loss_total_sum])
+			#gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.8)
+			sess = tf.Session()
 
 			#self.sess = sess
-
+			#--------------------------------Model-Training-------------------------------------------------------------
 			sess.run(tf.global_variables_initializer())
 
+			writer = tf.summary.FileWriter('/home/chenhui/fyp/logs/gan', sess.graph)
 			train_history = {}
 			train_history['D_losses'] = []
 			train_history['G_losses'] = []
 
-			count = 0
-			fixed_z = np.random.normal(0, 1, [self.batch_size, 100]) #Fixed Z for feeding
+			count = 1
+			fixed_z = np.random.normal(-1, 1, [self.batch_size, 100]) #Fixed Z for feeding
 
 			for i in range(self.training_epoch):
 
@@ -518,42 +549,34 @@ class model(object):
 
 				current_epoch = i
 
-	 			for j in range(self.num_of_data / self.batch_size):
+	 			for j in range(0, len(train_data) / self.batch_size):
 					#print "Current inter-index", j
-					temp = sess.run(one_element) # shape=(100, 32, 32, 3)
-
-					assert not np.any(np.isnan(temp)), "Error! The array becomes NaN"
+					batch_images = train_data[j*self.batch_size:(j+1)*self.batch_size]
+					#assert not np.any(np.isnan(batch_images)), "Error! The array becomes NaN"
 					#print temp.shape
-					z_ = np.random.normal(0, 1, [self.batch_size, 100])
-					loss_d, _ = sess.run([D_loss_total, D_optimize], feed_dict={x: temp, z: z_, is_training: True})
-
+					z_ = np.random.normal(-1, 1, [self.batch_size, 100])
+					loss_d, _, summary_str = sess.run([D_loss_total, D_optimize, D_sum], feed_dict={x: batch_images, z: z_, is_training: True})
+					writer.add_summary(summary_str, count)
 					D_losses.append(loss_d)
 
+					count += 1
 					#z_ = np.random.normal(0, 1, [self.batch_size, 100])
-					loss_g, _ = sess.run([G_loss_total, G_optimize], feed_dict={x: temp, z: z_, is_training: True})
-
+					loss_g, _, summary_str  = sess.run([G_loss_total, G_optimize, G_sum], feed_dict={x: batch_images, z: z_, is_training: True})
+					writer.add_summary(summary_str, count)
 					G_losses.append(loss_g)
 
-					if j % 10 == 0:
-
-						print "loss d is", loss_d
-						print "loss g is", loss_g
-
-					if(i == current_epoch):
+					if j % 50 == 0:
 
 						test_image = sess.run(G_z, feed_dict={z: fixed_z, is_training: True})
+						# print "The test image shape is ", test_image.shape (100, 32, 32, 3)
 						random_index = np.random.random_integers(0, self.batch_size - 1)
-						temp_dir = self.save_dir + '/result_' + str(current_epoch) + '.png'
-						self.save_image(test_image[random_index].reshape(32, 32, 3), temp_dir)
-						current_epoch = 0
+						temp_dir = self.save_dir + '/result_' + str(i) + '_' + str(j) + '.png'
+						self.save_image(test_image[self.batch_size - 1].reshape(32, 32, 3), temp_dir)
 				
 				train_history['D_losses'].append(np.mean(D_losses))
 				train_history['G_losses'].append(np.mean(G_losses))
-				print "Current D_losses", np.mean(train_history.get('D_losses'))
-				print "Current G_losses", np.mean(train_history.get('G_losses'))
-
-			if (i < (num_of_data / self.batch_size)):
-				print "Epoch number is smaller than batch_size"
+				print "At epoch " + str(i) + " Current D_losses are ", str(np.mean(train_history.get('D_losses')))
+				print "At epoch " + str(i) + " Current G_losses are ", str(np.mean(train_history.get('G_losses')))
 
 		return train_history
 
@@ -563,9 +586,10 @@ def main(argv):
 	"""
 	args = parser.parse_args(argv[1:])
 	ass = model(train_dir=args.train_dir, test_dir=args.test_dir, save_dir=args.save_dir, training_epoch=args.training_epoch,
-			batch_size=args.batch_size, is_training=args.is_training, is_testing=args.is_testing)
+			batch_size=args.batch_size, is_training=args.is_training, is_testing=args.is_testing, D_learning_rate=args.D_learning_rate,
+			G_learning_rate=args.G_learning_rate, num_of_data=args.num_of_data)
 	result = ass.build_model()
 
 if __name__ == '__main__':
-	tf.logging.set_verbosity(tf.logging.INFO)
+	#tf.logging.set_verbosity(tf.logging.INFO)
 	tf.app.run(main)
