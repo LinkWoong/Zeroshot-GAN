@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
-from __future__ import print_function
-from __future__ import absolute_import
 import cPickle as pickle
 import numpy as np
 import random
 import os
+import tensorflow as tf
+import scipy.misc as misc
+from cStringIO import StringIO
+from tensorflow.contrib.tensorboard.plugins import projector
 
 def pad_seq(seq, batch_size):
     # pad the sequence to be the multiples of batch_size
@@ -38,9 +40,6 @@ def normalize_image(img):
     """
     normalized = (img / 127.5) - 1.
     return normalized
-
-data_dir = '/home/chenhui/zi2zi/experiment/'
-label_dir = '/home/chenhui/zi2zi/experiment/'
 
 class PickledImageProvider(object):
     def __init__(self, obj_path):
@@ -103,7 +102,6 @@ def get_batch_iter(examples, batch_size, augment):
 
     return batch_iter()
 
-
 class TrainDataProvider(object):
     def __init__(self, data_dir, train_name="train.obj", val_name="val.obj", filter_by=None):
         self.data_dir = data_dir
@@ -147,40 +145,68 @@ class TrainDataProvider(object):
     def get_train_val_path(self):
         return self.train_path, self.val_path
 
+    def get_all_examples(self):
+        """
+        Get all training images
+        """
+        train_length = len(self.train.examples)
+        val_length = len(self.val.examples)
 
-class InjectDataProvider(object):
-    def __init__(self, obj_path):
-        self.data = PickledImageProvider(obj_path)
-        print("examples -> %d" % len(self.data.examples))
+        return train_length, val_length
 
-    def get_single_embedding_iter(self, batch_size, embedding_id):
-        examples = self.data.examples[:]
-        batch_iter = get_batch_iter(examples, batch_size, augment=False)
-        for _, images in batch_iter:
-            # inject specific embedding style here
-            labels = [embedding_id] * batch_size
-            yield labels, images
+# This is 1 class, and the goal is not to treat it as 3370 classes
+# On the contrast, the number of styles are treated as classes
+# so if labels have size (3370) -> indicating 1 class (style)
+# if labels have size (3370 *2 ) or something -> indicating 2 classes, each class has 3370 examples
 
-    def get_random_embedding_iter(self, batch_size, embedding_ids):
-        examples = self.data.examples[:]
-        batch_iter = get_batch_iter(examples, batch_size, augment=False)
-        for _, images in batch_iter:
-            # inject specific embedding style here
-            labels = [random.choice(embedding_ids) for i in range(batch_size)]
-            yield labels, images
+data_dir = '/home/chenhui/zi2zi/experiment/data/char_zips/'
+train_list = ['train_Font_Pair_No_1004.obj','train_Font_Pair_No_1005.obj',
+                'train_Font_Pair_No_1006.obj','train_Font_Pair_No_1007.obj',
+                'train_Font_Pair_No_1008.obj','train_Font_Pair_No_1009.obj']
 
-data_provider = TrainDataProvider(data_dir)
-batch_size = 16
-total_batch_num = data_provider.compute_total_batch_num(batch_size)
-print("Total batch number is %d " % total_batch_num)
-train_batch_iter = data_provider.get_train_iter(batch_size)
-'''
-for bid, batch in enumerate(train_batch_iter):
-    labels, batch_images = batch
-    print(labels)
-    print(batch_images.shape)
-'''
-all_labels = data_provider.get_all_labels()
-with open(os.path.join(label_dir, 'metadata.tsv'), 'w') as meta_file:
-    for row in all_labels:
-        meta_file.write('%d\n' % row)
+val_list = ['val_Font_Pair_No_1004.obj','val_Font_Pair_No_1005.obj',
+            'val_Font_Pair_No_1006.obj','val_Font_Pair_No_1007.obj',
+            'val_Font_Pair_No_1008.obj','val_Font_Pair_No_1009.obj']
+
+image_list = []
+label_list = []
+
+for i in range(0, 6):
+    data_provider = TrainDataProvider(data_dir=data_dir, train_name=train_list[i], val_name=val_list[i])
+    train_length, val_length = data_provider.get_all_examples()
+    print "The length of training data is %d " % train_length
+    print "The length of val data is %d " % val_length
+
+    train_images = data_provider.get_train_iter(train_length)
+
+    for index, batch in enumerate(train_images):
+        labels, images = batch
+        label_list.append(labels)
+        image_list.append(images)
+result = np.concatenate((image_list[0], image_list[1], image_list[2], image_list[3], image_list[4], image_list[5]), axis=0)
+result = result[:,:,:3]
+label_result = np.concatenate((label_list[0], label_list[1], label_list[2], label_list[3], label_list[4], label_list[5]), axis=0)
+images = np.reshape(result, (20113, -1))
+print images.shape # (20113, 24576)
+#print "The length of labels is %d" % len(label_list)
+print "The label shape is ", label_result.shape # (20113, )
+
+#----------------projector implementation---------------
+
+images_var = tf.Variable(images, name='images')
+meta_data = os.path.join(data_dir, 'metadata.tsv')
+with open(meta_data, 'w') as mf:
+    for row in label_result:
+        mf.write('%d\n' % row)
+
+with tf.Session() as sess:
+    saver = tf.train.Saver([images_var])
+    print images_var.get_shape()
+    sess.run(images_var.initializer)
+    saver.save(sess, os.path.join(data_dir, 'images.ckpt'))
+
+    config = projector.ProjectorConfig()
+    embedding = config.embeddings.add()
+    embedding.tensor_name = images_var.name
+    embedding.metadata_path = meta_data
+    projector.visualize_embeddings(tf.summary.FileWriter(data_dir), config)
